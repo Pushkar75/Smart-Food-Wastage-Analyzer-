@@ -1,0 +1,66 @@
+{
+  "model": "XGBoost Poisson",
+  "objective": "count:poisson",
+  "target_coverage": 0.9,
+  "raw_rows": 1404,
+  "warmup_rows_removed": 56,
+  "train_rows": 943,
+  "validation_rows": 202,
+  "test_rows": 203,
+  "train_start": "2025-01-29",
+  "train_end": "2025-09-21",
+  "validation_start": "2025-09-21",
+  "validation_end": "2025-11-11",
+  "test_start": "2025-11-11",
+  "test_end": "2025-12-31",
+  "validation_metrics": {
+    "mae": 10.658423697594369,
+    "rmse": 13.470815395405586,
+    "mean_poisson_deviance": 0.25096017160758594
+  },
+  "test_metrics": {
+    "mae": 10.241903070158559,
+    "rmse": 13.218087845147902,
+    "mean_poisson_deviance": 0.23365797043524525
+  },
+  "baseline_metrics": {
+    "mae": 76.85785528382456,
+    "rmse": 90.40036918657266,
+    "mean_poisson_deviance": 12.083816157531523
+  },
+  "comparison": {
+    "baseline": {
+      "mae": 76.85785528382456,
+      "rmse": 90.40036918657266,
+      "mean_poisson_deviance": 12.083816157531523
+    },
+    "xgboost_poisson": {
+      "mae": 10.241903070158559,
+      "rmse": 13.218087845147902,
+      "mean_poisson_deviance": 0.23365797043524525
+    },
+    "xgboost_mae_minus_baseline_mae": -66.615952213666
+  },
+  "prediction_interval": {
+    "coverage": 0.9261083743842364,
+    "outside_rate": 0.07389162561576355,
+    "mean_interval_width": 44.917724609375,
+    "point_mae": 10.241903070158559
+  },
+  "interval_calibration": {
+    "method": "split_conformal_absolute_residual",
+    "target_coverage": 0.9,
+    "residual_quantile": 22.4588623046875
+  },
+  "best_parameters": {
+    "n_estimators": 450.0,
+    "max_depth": 3.0,
+    "learning_rate": 0.07,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "min_child_weight": 3.0,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0
+  },
+  "shap_exported": false
+}

@@ -1,0 +1,6 @@
+{
+  "current_version": 2,
+  "model_file": "xgboost_attendance_model_v2.json",
+  "artifact_file": "inference_artifacts_v2.joblib",
+  "metrics_file": "evaluation_metrics_v2.json"
+}

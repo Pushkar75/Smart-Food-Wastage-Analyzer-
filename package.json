@@ -1,0 +1,17 @@
+{
+  "name": "smartmess-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart Mess Management & Student Food Wastage Analyser Application Suite",
+  "scripts": {
+    "install:all": "npm install --prefix mess/backend && npm install --prefix mess/frontend && npm install --prefix student/backend && npm install --prefix student/frontend",
+    "dev": "concurrently -n \"MESS-API,MESS-UI,STU-API,STU-UI\" -c \"blue,cyan,green,yellow\" \"npm run dev --prefix mess/backend\" \"npm run dev --prefix mess/frontend\" \"npm run dev --prefix student/backend\" \"npm run dev --prefix student/frontend\"",
+    "dev:mess": "concurrently -n \"MESS-API,MESS-UI\" -c \"blue,cyan\" \"npm run dev --prefix mess/backend\" \"npm run dev --prefix mess/frontend\"",
+    "dev:student": "concurrently -n \"STU-API,STU-UI\" -c \"green,yellow\" \"npm run dev --prefix student/backend\" \"npm run dev --prefix student/frontend\"",
+    "build": "npm run build --prefix mess/frontend && npm run build --prefix student/frontend",
+    "test": "npm test --prefix student/backend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

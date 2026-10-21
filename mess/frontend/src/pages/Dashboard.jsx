@@ -1,0 +1,515 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Users, CheckCircle, Clock } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002';
+const HARDWARE_API_URL = import.meta.env.VITE_HARDWARE_API_URL || 'http://localhost:5002';
+
+export default function Dashboard() {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Hardware Mode & Enrollment states
+  const [hardwareMode, setHardwareMode] = useState('verify');
+  const [capturedFpId, setCapturedFpId] = useState(null);
+  const [enrollStudentId, setEnrollStudentId] = useState('');
+  const [enrollName, setEnrollName] = useState('');
+  const [enrollMessage, setEnrollMessage] = useState(null);
+  const [enrolling, setEnrolling] = useState(false);
+
+  const fetchSummary = useCallback(() => {
+    fetch('/api/dashboard/summary')
+      .then(res => res.json())
+      .then(json => {
+        setDashboardData(json);
+        setRecentActivity(prev => (prev.length === 0 && json.recentActivity ? json.recentActivity : prev));
+        if (json.notifications && json.notifications.length > 0) {
+          setNotifications(prev => (prev.length === 0 ? json.notifications : prev));
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching dashboard data:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const fetchHardwareStatus = useCallback(() => {
+    fetch(`${HARDWARE_API_URL}/api/hardware/status`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.mode) setHardwareMode(data.mode);
+        if (data.lastCapturedId) setCapturedFpId(data.lastCapturedId);
+      })
+      .catch(err => console.error('Error fetching hardware status from port 5002:', err));
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+    fetchHardwareStatus();
+
+    // Socket.io real-time connection
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+
+    socket.on('connect', () => {
+      console.log('[mess dashboard] Connected to real-time socket server');
+    });
+
+    const handleAttendanceUpdate = (scanResult) => {
+      console.log('[Dashboard Socket] attendance:update received:', scanResult);
+      if (!scanResult) return;
+      const mealName = scanResult.mealName || (scanResult.meal ? scanResult.meal.charAt(0).toUpperCase() + scanResult.meal.slice(1) : 'Meal');
+      const studentId = scanResult.studentId || scanResult.name || 'Student';
+
+      let newActivity = null;
+      let newNotification = null;
+
+      if (scanResult.status === 'already_marked') {
+        newNotification = {
+          id: 'notif-' + Date.now(),
+          type: 'warning',
+          message: `⚠️ Duplicate scan attempt by student [${studentId}] for ${mealName}`,
+        };
+        newActivity = {
+          id: 'act-dup-' + Date.now(),
+          title: `Duplicate scan attempt: ${studentId} (${mealName})`,
+          description: `Duplicate scan attempt: ${studentId} (${mealName})`,
+          timestamp: 'Just now',
+          time: 'Just now',
+          variant: 'duplicate',
+          dotColor: '#ef4444',
+        };
+      } else if (scanResult.status === 'success') {
+        const isWalkIn = scanResult.isWalkIn;
+        newActivity = {
+          id: 'act-scan-' + Date.now(),
+          title: `Student ${studentId} verified for ${mealName} (${isWalkIn ? 'Walk-in' : 'Booked'})`,
+          description: `Student ${studentId} verified for ${mealName} (${isWalkIn ? 'Walk-in' : 'Booked'})`,
+          timestamp: 'Just now',
+          time: 'Just now',
+          variant: isWalkIn ? 'walkin' : 'booked',
+          dotColor: isWalkIn ? '#3b82f6' : 'var(--success-color)',
+        };
+      }
+
+      if (newActivity) {
+        setRecentActivity(prev => [newActivity, ...prev].slice(0, 6));
+      }
+      if (newNotification) {
+        setNotifications(prev => [newNotification, ...prev].slice(0, 5));
+      }
+    };
+
+    const handleIntentUpdate = (intentData) => {
+      console.log('[Dashboard Socket] intent:update received:', intentData);
+      if (!intentData) return;
+      const mealLabel = intentData.mealId ? intentData.mealId.charAt(0).toUpperCase() + intentData.mealId.slice(1) : 'Meal';
+      const studentId = intentData.studentId || 'Student';
+
+      const newActivity = {
+        id: 'act-intent-' + Date.now(),
+        title: `Student ${studentId} updated ${mealLabel} response to: ${intentData.intent}`,
+        description: `Student ${studentId} updated ${mealLabel} response to: ${intentData.intent}`,
+        timestamp: 'Just now',
+        time: 'Just now',
+        variant: 'intent',
+        dotColor: '#f59e0b',
+      };
+
+      setRecentActivity(prev => [newActivity, ...prev].slice(0, 6));
+    };
+
+    const handleHardwareModeChange = (data) => {
+      console.log('[Dashboard Socket] hardware:mode_changed received:', data);
+      if (data && data.mode) {
+        setHardwareMode(data.mode);
+        if (data.mode === 'enroll') setCapturedFpId(data.lastCapturedId || null);
+      }
+    };
+
+    const handleFingerprintCaptured = (data) => {
+      console.log('[Dashboard Socket] hardware:fingerprint_captured received:', data);
+      if (data && data.fingerprintId) {
+        setCapturedFpId(data.fingerprintId);
+        setNotifications(prev => [
+          {
+            id: 'notif-cap-' + Date.now(),
+            type: 'info',
+            message: `⚡ New Fingerprint Template Captured: Slot #${data.fingerprintId}`,
+          },
+          ...prev,
+        ].slice(0, 5));
+      }
+    };
+
+    socket.on('attendance:update', handleAttendanceUpdate);
+    socket.on('intent:update', handleIntentUpdate);
+    socket.on('dashboard:stats_changed', () => fetchSummary());
+    socket.on('hardware:mode_changed', handleHardwareModeChange);
+    socket.on('hardware:fingerprint_captured', handleFingerprintCaptured);
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [fetchSummary, fetchHardwareStatus]);
+
+  const toggleHardwareMode = (newMode) => {
+    fetch(`${HARDWARE_API_URL}/api/hardware/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: newMode }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.mode) {
+          setHardwareMode(data.mode);
+          setEnrollMessage(null);
+        }
+      })
+      .catch(err => console.error('Error toggling hardware mode on port 5002:', err));
+  };
+
+  const handleEnrollSubmit = (e) => {
+    e.preventDefault();
+    if (!enrollStudentId || !enrollName || !capturedFpId) return;
+
+    setEnrolling(true);
+    setEnrollMessage(null);
+
+    fetch(`${HARDWARE_API_URL}/api/hardware/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentId: enrollStudentId,
+        name: enrollName,
+        fingerprintId: capturedFpId,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || data.message || 'Failed to enroll student.');
+        }
+        return data;
+      })
+      .then(data => {
+        setEnrolling(false);
+        if (data.status === 'success' || data.user) {
+          setEnrollMessage({ type: 'success', text: data.message || 'Fingerprint linked successfully!' });
+          setCapturedFpId(null);
+          setEnrollStudentId('');
+          setEnrollName('');
+          fetchSummary();
+        } else {
+          setEnrollMessage({ type: 'error', text: data.error || data.message || 'Failed to link fingerprint.' });
+        }
+      })
+      .catch(err => {
+        setEnrolling(false);
+        setEnrollMessage({ type: 'error', text: err.message || 'Error connecting to port 5002.' });
+      });
+  };
+
+  if (loading) return <div>Loading...</div>;
+  if (!dashboardData) return <div>Error loading data.</div>;
+
+  const currentMeal = dashboardData.currentMeal || {
+    name: 'Breakfast',
+    label: 'Breakfast (7:30 AM)',
+    predicted: dashboardData.summary?.predicted || 280,
+    confirmed: dashboardData.summary?.confirmed || 268,
+    actual: dashboardData.summary?.actualSoFar || 254,
+    accuracy: dashboardData.summary?.accuracy || 95.0,
+    status: 'Serving',
+  };
+
+  const nextMeal = dashboardData.nextMeal || {
+    label: 'Dinner (7:30 PM)',
+    predicted: 567,
+    confirmed: 580,
+    recommended: 570,
+  };
+
+  const fullDay = dashboardData.fullDay || {
+    predicted: (dashboardData.summary?.predicted || 280) * 3,
+    confirmed: (dashboardData.summary?.confirmed || 268) * 3,
+    actual: dashboardData.summary?.actualSoFar || 254,
+    accuracy: dashboardData.summary?.accuracy || 94.8,
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem' }}>Dashboard Overview</h2>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Real-time biometric entrance sync & meal intent analyzer
+          </p>
+        </div>
+        <span className="badge badge-success">
+          Active Meal: {currentMeal.name}
+        </span>
+      </div>
+
+      {/* ESP32 Hardware Mode Control Panel */}
+      <div className="card" style={{ marginBottom: '1.5rem', borderLeft: hardwareMode === 'enroll' ? '4px solid #8b5cf6' : '4px solid #10b981' }}>
+        <div className="flex justify-between items-center" style={{ flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h3 style={{ fontSize: '1.125rem', margin: 0 }}>ESP32 Scanner Mode</h3>
+              <span className={`badge ${hardwareMode === 'enroll' ? 'badge-warning' : 'badge-success'}`} style={{ backgroundColor: hardwareMode === 'enroll' ? '#8b5cf6' : undefined, color: '#fff' }}>
+                {hardwareMode === 'enroll' ? 'ENROLLMENT MODE' : 'VERIFICATION MODE (LIVE)'}
+              </span>
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginBottom: 0 }}>
+              {hardwareMode === 'enroll'
+                ? 'Scanner saves new fingerprint templates to memory and reports captured Slot IDs.'
+                : 'Scanner verifies incoming student fingerprints against SQLite attendance database.'}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => toggleHardwareMode('verify')}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-md, 6px)',
+                cursor: 'pointer',
+                backgroundColor: hardwareMode === 'verify' ? '#10b981' : 'transparent',
+                color: hardwareMode === 'verify' ? '#fff' : 'inherit',
+                border: '1px solid #10b981',
+                fontWeight: 600,
+              }}
+            >
+              Verification Mode
+            </button>
+            <button
+              onClick={() => toggleHardwareMode('enroll')}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-md, 6px)',
+                cursor: 'pointer',
+                backgroundColor: hardwareMode === 'enroll' ? '#8b5cf6' : 'transparent',
+                color: hardwareMode === 'enroll' ? '#fff' : 'inherit',
+                border: '1px solid #8b5cf6',
+                fontWeight: 600,
+              }}
+            >
+              Enrollment Mode
+            </button>
+          </div>
+        </div>
+
+        {/* Enrollment Capture & Mapping Form */}
+        {hardwareMode === 'enroll' && (
+          <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color, #e5e7eb)' }}>
+            {capturedFpId ? (
+              <form onSubmit={handleEnrollSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ padding: '0.75rem 1rem', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderRadius: 'var(--radius-md, 6px)', border: '1px solid #8b5cf6', color: '#6d28d9', fontSize: '0.875rem', fontWeight: 600 }}>
+                  ⚡ New Fingerprint Template Captured: Slot #{capturedFpId}
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    placeholder="Enter Student Name"
+                    value={enrollName}
+                    onChange={(e) => setEnrollName(e.target.value)}
+                    style={{ flex: 1, minWidth: '180px', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md, 6px)', border: '1px solid #ccc', fontSize: '0.875rem' }}
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Enter Student Reg No (e.g. 24BCE7998)"
+                    value={enrollStudentId}
+                    onChange={(e) => setEnrollStudentId(e.target.value)}
+                    style={{ flex: 1, minWidth: '180px', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md, 6px)', border: '1px solid #ccc', fontSize: '0.875rem' }}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={enrolling}
+                    style={{ padding: '0.5rem 1.25rem', backgroundColor: '#8b5cf6', color: '#fff', borderRadius: 'var(--radius-md, 6px)', border: 'none', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {enrolling ? 'Enrolling...' : `Link Slot #${capturedFpId}`}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Ready to enroll: Instruct student to place finger on the ESP32 scanner twice. The captured Slot ID will appear here automatically.
+              </div>
+            )}
+
+            {enrollMessage && (
+              <div style={{ marginTop: '0.75rem', fontSize: '0.875rem', color: enrollMessage.type === 'success' ? '#10b981' : '#ef4444', fontWeight: 500 }}>
+                {enrollMessage.text}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Notifications */}
+      {notifications && notifications.length > 0 && (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {notifications.map(note => (
+            <div key={note.id} className={`badge badge-${note.type}`} style={{ padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', display: 'block', fontSize: '0.875rem' }}>
+              {note.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tier 1: Current Active Meal Cards */}
+      <div style={{ marginBottom: '2rem' }}>
+        <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
+            Current Active Meal ({currentMeal.label || currentMeal.name})
+          </h3>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Status: {currentMeal.status}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <div className="card">
+            <div className="flex items-center justify-between" style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500 }}>Meal Predicted</h3>
+              <Users size={18} color="var(--primary-color)" />
+            </div>
+            <div style={{ fontSize: '2rem', fontWeight: 700 }}>{currentMeal.predicted}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Prepared for this meal</div>
+          </div>
+          
+          <div className="card">
+            <div className="flex items-center justify-between" style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500 }}>Confirmed Intentions</h3>
+              <CheckCircle size={18} color="var(--success-color)" />
+            </div>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--success-color)' }}>{currentMeal.confirmed}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Students opting in</div>
+          </div>
+          
+          <div className="card">
+            <div className="flex items-center justify-between" style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500 }}>Actual Served</h3>
+              <Users size={18} color="var(--warning-color)" />
+            </div>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary-color)' }}>{currentMeal.actual}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Recorded attendance</div>
+          </div>
+          
+          <div className="card">
+            <div className="flex items-center justify-between" style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500 }}>Current Accuracy</h3>
+              <Clock size={18} color="var(--primary-color)" />
+            </div>
+            <div style={{ fontSize: '2rem', fontWeight: 700 }}>{currentMeal.accuracy}%</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.5rem' }}>Active meal ratio</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tier 2: Next Meal Prediction & Recent Activity */}
+      <div className="grid grid-cols-3 gap-6" style={{ marginBottom: '2rem' }}>
+        {/* Next Meal Prediction Card */}
+        <div className="card" style={{ gridColumn: 'span 2' }}>
+          <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.125rem' }}>Next Meal Prediction</h3>
+            <span className="badge badge-warning">Prediction Engine</span>
+          </div>
+          
+          <div className="flex justify-between items-center" style={{ padding: '1.5rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Upcoming Meal</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{nextMeal.label || 'Dinner (7:30 PM)'}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Expected Attendance</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary-color)' }}>{nextMeal.predicted}</div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Confirmed Intentions</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 600 }}>{nextMeal.confirmed}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Recommended Preparation</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 600 }}>~{nextMeal.recommended || nextMeal.confirmed} meals</div>
+            </div>
+          </div>
+          
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1.5rem', fontStyle: 'italic' }}>
+            *Prediction is based on historical attendance trends and active meal confirmations.
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="card">
+          <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem' }}>Recent Activity</h3>
+          <div className="flex flex-col gap-4">
+            {recentActivity && recentActivity.map(activity => (
+              <div key={activity.id} className="flex gap-3 items-start">
+                <div style={{ marginTop: '0.35rem' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: activity.dotColor || (activity.variant === 'duplicate' ? '#ef4444' : activity.variant === 'walkin' ? '#3b82f6' : 'var(--success-color)')
+                  }}></div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                    {activity.title || activity.description}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {activity.timestamp || activity.time}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tier 3: Full Day Overview Cards */}
+      <div style={{ marginTop: '1rem' }}>
+        <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Full Day Overview (Daily Cumulative)</h3>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Breakfast + Lunch + Dinner Aggregate</span>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Full Day Predicted</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{fullDay.predicted}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Total planned for today</div>
+          </div>
+
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Full Day Confirmed</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--success-color)' }}>{fullDay.confirmed}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Cumulative student opt-ins</div>
+          </div>
+
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Full Day Actual Served</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary-color)' }}>{fullDay.actual}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Total recorded entrances</div>
+          </div>
+
+          <div className="card">
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Overall Daily Accuracy</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{fullDay.accuracy}%</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.25rem' }}>Attendance vs Opt-ins</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

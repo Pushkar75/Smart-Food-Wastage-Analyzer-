@@ -1,0 +1,3 @@
+Place the provided mess_attendance_synthetic_dataset.csv in this directory.
+
+The implementation does not regenerate or alter the dataset.
