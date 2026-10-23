@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
 const apiRoutes = require('./routes/api');
+const { initMealSyncCron } = require('./cron/mealSyncCron');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -54,4 +55,6 @@ app.use('/api', apiRoutes);
 // Server listen call (strictly using server.listen, not app.listen)
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Mess Admin Backend + Socket.io running on port ${PORT}`);
+  // Initialize automated post-meal ML sync cron jobs
+  initMealSyncCron(io);
 });

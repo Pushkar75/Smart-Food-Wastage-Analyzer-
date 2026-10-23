@@ -18,7 +18,7 @@ const mockData = {
     {
       id: 'm1',
       type: 'Breakfast',
-      time: '7:00 AM',
+      time: '07:00 - 09:00',
       predicted: 620,
       confirmed: 648,
       actual: 601,
@@ -27,7 +27,7 @@ const mockData = {
     {
       id: 'm2',
       type: 'Lunch',
-      time: '12:30 PM',
+      time: '12:30 - 14:15',
       predicted: 655,
       confirmed: 682,
       actual: 642,
@@ -36,7 +36,7 @@ const mockData = {
     {
       id: 'm3',
       type: 'Dinner',
-      time: '7:30 PM',
+      time: '19:15 - 21:00',
       predicted: 567,
       confirmed: 580,
       actual: null,

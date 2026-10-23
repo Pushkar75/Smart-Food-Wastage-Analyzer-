@@ -147,6 +147,7 @@ export default function Dashboard() {
     socket.on('attendance:update', handleAttendanceUpdate);
     socket.on('intent:update', handleIntentUpdate);
     socket.on('dashboard:stats_changed', () => fetchSummary());
+    socket.on('meal:concluded', () => fetchSummary());
     socket.on('hardware:mode_changed', handleHardwareModeChange);
     socket.on('hardware:fingerprint_captured', handleFingerprintCaptured);
 
@@ -237,9 +238,16 @@ export default function Dashboard() {
   if (loading) return <div>Loading...</div>;
   if (!dashboardData) return <div>Error loading data.</div>;
 
+    const formattedCurrentDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
   const currentMeal = dashboardData.currentMeal || {
     name: 'Breakfast',
-    label: 'Breakfast (7:30 AM)',
+    label: 'Breakfast (07:00 - 09:00)',
     predicted: dashboardData.summary?.predicted || 280,
     confirmed: dashboardData.summary?.confirmed || 268,
     actual: dashboardData.summary?.actualSoFar || 254,
@@ -248,7 +256,7 @@ export default function Dashboard() {
   };
 
   const nextMeal = dashboardData.nextMeal || {
-    label: 'Dinner (7:30 PM)',
+    label: 'Dinner (19:15 - 21:00)',
     predicted: 567,
     confirmed: 580,
     recommended: 570,
@@ -388,6 +396,9 @@ export default function Dashboard() {
 
       {/* Tier 1: Current Active Meal Cards */}
       <div style={{ marginBottom: '2rem' }}>
+        <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.35rem' }}>
+          {formattedCurrentDate}
+        </div>
         <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
             Current Active Meal ({currentMeal.label || currentMeal.name})
@@ -441,17 +452,21 @@ export default function Dashboard() {
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.125rem' }}>Next Meal Prediction</h3>
-            <span className="badge badge-warning">Prediction Engine</span>
           </div>
           
           <div className="flex justify-between items-center" style={{ padding: '1.5rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Upcoming Meal</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{nextMeal.label || 'Dinner (7:30 PM)'}</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{nextMeal.label || 'Dinner (19:15 - 21:00)'}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Expected Attendance</div>
               <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary-color)' }}>{nextMeal.predicted}</div>
+              {nextMeal.lowerBound && nextMeal.upperBound && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  90% Interval: [{nextMeal.lowerBound} – {nextMeal.upperBound}]
+                </div>
+              )}
             </div>
           </div>
           

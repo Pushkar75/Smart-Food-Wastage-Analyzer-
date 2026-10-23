@@ -3,6 +3,14 @@ const express = require('express');
 const router = express.Router();
 const mockData = require('../mockData');
 const store = require(path.resolve(__dirname, '../../../student/backend/store'));
+const { db } = require(path.resolve(__dirname, '../../../student/backend/db'));
+const {
+  buildMlPayload,
+  generateMealPrediction,
+  recordSessionAttendance,
+  getLatestPrediction,
+  toDateString,
+} = require('../utils/mlMetricUtility');
 const {
   generateOtp,
   sendOtpEmail,
@@ -254,29 +262,150 @@ router.get('/profile', (req, res) => {
   res.json(mockData.mess);
 });
 
-// Dashboard Summary (uses live DB stats from smartmess.db)
-router.get('/dashboard/summary', (req, res) => {
-  const liveStats = store.getLiveStats();
-  res.json({
-    currentMeal: liveStats.currentMeal,
-    nextMeal: liveStats.nextMeal,
-    fullDay: liveStats.fullDay,
-    summary: liveStats.summary,
-    recentActivity: mockData.recentActivity,
-    notifications: mockData.notifications,
-    meals: liveStats.meals
-  });
+// Dashboard Summary (integrates live DB stats and pre-meal ML attendance predictions)
+router.get('/dashboard/summary', async (req, res) => {
+  try {
+    const liveStats = store.getLiveStats();
+    const todayStr = liveStats.date || toDateString(new Date());
+
+    // Resolve current and next meal IDs
+    const currentMealId = liveStats.currentMeal?.id || 'lunch';
+    const nextMealId = liveStats.nextMeal?.id || 'dinner';
+
+    // 1. Pre-meal ML Prediction for current meal
+    let currentPred = getLatestPrediction(currentMealId, todayStr);
+    if (!currentPred) {
+      const mlRes = await generateMealPrediction({ mealId: currentMealId, date: todayStr });
+      currentPred = {
+        prediction_id: mlRes.prediction_id,
+        predicted_attendance: mlRes.predicted_attendance,
+        lower_bound: mlRes.lower_bound,
+        upper_bound: mlRes.upper_bound,
+      };
+    }
+
+    // 2. Pre-meal ML Prediction for upcoming (next) meal
+    let nextPred = getLatestPrediction(nextMealId, todayStr);
+    if (!nextPred) {
+      const mlRes = await generateMealPrediction({ mealId: nextMealId, date: todayStr });
+      nextPred = {
+        prediction_id: mlRes.prediction_id,
+        predicted_attendance: mlRes.predicted_attendance,
+        lower_bound: mlRes.lower_bound,
+        upper_bound: mlRes.upper_bound,
+      };
+    }
+
+    // 3. Inject ML predictions into liveStats
+    if (currentPred?.predicted_attendance) {
+      liveStats.currentMeal.predicted = currentPred.predicted_attendance;
+      liveStats.currentMeal.predictionId = currentPred.prediction_id;
+      liveStats.currentMeal.lowerBound = currentPred.lower_bound;
+      liveStats.currentMeal.upperBound = currentPred.upper_bound;
+      liveStats.summary.predicted = currentPred.predicted_attendance;
+    }
+
+    if (nextPred?.predicted_attendance) {
+      liveStats.nextMeal.predicted = nextPred.predicted_attendance;
+      liveStats.nextMeal.predictionId = nextPred.prediction_id;
+      liveStats.nextMeal.lowerBound = nextPred.lower_bound;
+      liveStats.nextMeal.upperBound = nextPred.upper_bound;
+      liveStats.nextMeal.recommended = Math.round(nextPred.predicted_attendance * 0.98);
+    }
+
+    // 4. Update fullDay predicted total
+    const fullDaySum = (liveStats.meals || []).reduce((acc, m) => {
+      const pred = getLatestPrediction(m.id, todayStr)?.predicted_attendance || m.predicted;
+      return acc + pred;
+    }, 0);
+    if (fullDaySum > 0) {
+      liveStats.fullDay.predicted = fullDaySum;
+    }
+
+    return res.json({
+      currentMeal: liveStats.currentMeal,
+      nextMeal: liveStats.nextMeal,
+      fullDay: liveStats.fullDay,
+      summary: liveStats.summary,
+      recentActivity: mockData.recentActivity,
+      notifications: mockData.notifications,
+      meals: liveStats.meals,
+      mlModel: 'XGBoost Poisson',
+    });
+  } catch (err) {
+    console.error('[dashboard/summary error]:', err);
+    const liveStats = store.getLiveStats();
+    return res.json({
+      currentMeal: liveStats.currentMeal,
+      nextMeal: liveStats.nextMeal,
+      fullDay: liveStats.fullDay,
+      summary: liveStats.summary,
+      recentActivity: mockData.recentActivity,
+      notifications: mockData.notifications,
+      meals: liveStats.meals,
+    });
+  }
 });
 
 // Today's Meals (uses live DB snapshot from smartmess.db)
 router.get('/meals/today', (req, res) => {
   const snapshot = store.adminMealSnapshot();
-  res.json(snapshot);
+  const todayStr = toDateString(new Date());
+  // Augment with stored ML predictions if available
+  const augmented = snapshot.map((m) => {
+    const ml = getLatestPrediction(m.id, todayStr);
+    return ml ? { ...m, predicted: ml.predicted_attendance, predictionId: ml.prediction_id } : m;
+  });
+  res.json(augmented);
 });
 
-// Predictions
+// Explicit Pre-meal ML Prediction Trigger
+router.post('/predictions/predict', async (req, res) => {
+  try {
+    const { mealId, date, registeredStudents, onLeave } = req.body || {};
+    const result = await generateMealPrediction({
+      mealId: mealId || 'lunch',
+      date: date || new Date(),
+      registeredStudents,
+      onLeave,
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error('[API /predictions/predict error]:', err);
+    return res.status(500).json({ error: 'prediction_failed', message: err.message });
+  }
+});
+
+    // Predictions History (reads from isolated ml_predictions SQLite table)
 router.get('/predictions', (req, res) => {
-  res.json(mockData.history);
+  try {
+    const predictionsStmt = db.prepare(`
+      SELECT prediction_id, prediction_date, meal_type, predicted_attendance, actual_attendance, lower_bound, upper_bound, status, created_at
+      FROM ml_predictions
+      ORDER BY prediction_date DESC, created_at DESC
+      LIMIT 30
+    `);
+    const mlRows = predictionsStmt.all();
+    if (mlRows && mlRows.length > 0) {
+      const formatted = mlRows.map((r) => ({
+        date: r.prediction_date,
+        meal: r.meal_type.charAt(0).toUpperCase() + r.meal_type.slice(1),
+        predicted: r.predicted_attendance,
+        actual: r.actual_attendance,
+        lowerBound: r.lower_bound,
+        upperBound: r.upper_bound,
+        status: r.status,
+        predictionId: r.prediction_id,
+        accuracy: (r.actual_attendance && r.predicted_attendance)
+          ? Math.min(100, Number(((1 - Math.abs(r.actual_attendance - r.predicted_attendance) / r.actual_attendance) * 100).toFixed(1)))
+          : null,
+      }));
+      return res.json(formatted);
+    }
+  } catch (err) {
+    console.warn('[predictions fetch warning]:', err.message);
+  }
+  return res.json(mockData.history);
 });
 
 // Attendance History

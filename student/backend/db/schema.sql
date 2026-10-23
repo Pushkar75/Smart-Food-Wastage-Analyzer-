@@ -120,3 +120,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+
+-- Isolated table for ML model predictions and post-meal actual attendance logs.
+-- Core meal session and ESP32 fingerprint attendance tables remain completely untouched.
+CREATE TABLE IF NOT EXISTS ml_predictions (
+  prediction_id        TEXT PRIMARY KEY,
+  prediction_date      TEXT NOT NULL,
+  meal_type            TEXT NOT NULL,
+  predicted_attendance INTEGER,
+  actual_attendance    INTEGER DEFAULT NULL,
+  lower_bound          INTEGER,
+  upper_bound          INTEGER,
+  status               TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'recorded')),
+  created_at           TEXT DEFAULT (datetime('now')),
+  recorded_at          TEXT DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_predictions_date_meal ON ml_predictions (prediction_date, meal_type);
