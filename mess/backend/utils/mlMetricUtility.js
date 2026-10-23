@@ -7,7 +7,7 @@
  */
 
 const path = require('path');
-const { db } = require(path.resolve(__dirname, '../../../student/backend/db'));
+const { db } = require('../db');
 
 const ML_API_BASE_URL = process.env.ML_API_URL || 'http://127.0.0.1:8000';
 

@@ -2,8 +2,8 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 const mockData = require('../mockData');
-const store = require(path.resolve(__dirname, '../../../student/backend/store'));
-const { db } = require(path.resolve(__dirname, '../../../student/backend/db'));
+const store = require('../store');
+const { db } = require('../db');
 const {
   buildMlPayload,
   generateMealPrediction,

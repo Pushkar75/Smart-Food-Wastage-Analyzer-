@@ -14,7 +14,7 @@
  *       Everything a student sees about themselves is real, persisted data.
  */
 
-const { db } = require('./db');
+const { db, dbPath } = require('./db');
 const { seedReferenceData, seedDemoHistory } = require('./db/seed');
 
 const MINUTE = 60 * 1000;
@@ -626,6 +626,9 @@ const attendanceLog = [
 ];
 
 module.exports = {
+  // database connection & storage path
+  db,
+  dbPath,
   // accounts + sessions (auth.js)
   findUserForLogin,
   getUserById,

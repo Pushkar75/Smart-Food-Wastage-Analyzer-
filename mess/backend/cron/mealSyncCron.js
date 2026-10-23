@@ -17,7 +17,7 @@ const {
   getLatestPrediction,
   toDateString,
 } = require('../utils/mlMetricUtility');
-const store = require(path.resolve(__dirname, '../../../student/backend/store'));
+const store = require('../store');
 
 async function syncMealAttendance(mealId, io) {
   try {

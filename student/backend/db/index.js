@@ -14,7 +14,10 @@ const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
 const DEFAULT_PATH = path.join(__dirname, '..', 'data', 'smartmess.db');
-const dbPath = process.env.DB_PATH || DEFAULT_PATH;
+const rawPath = process.env.DB_PATH || DEFAULT_PATH;
+const dbPath = (rawPath === ':memory:' || path.isAbsolute(rawPath))
+  ? rawPath
+  : path.resolve(process.cwd(), rawPath);
 
 if (dbPath !== ':memory:') {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });

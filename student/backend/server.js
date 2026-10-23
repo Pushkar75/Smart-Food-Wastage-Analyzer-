@@ -18,27 +18,61 @@ const store = require('./store');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Parse configured FRONTEND_URL(s), supporting comma-separated values (e.g. "https://student.vercel.app,https://admin.vercel.app")
+const rawFrontendUrls = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((url) => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  ...rawFrontendUrls,
 ];
+
+function isOriginAllowed(origin) {
+  // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+  if (!origin) return true;
+
+  // Explicit allowed list (localhost ports + FRONTEND_URL)
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Local development on any port (localhost / 127.0.0.1)
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+
+  // Future Vercel deployment preview and production domains (*.vercel.app)
+  if (/^https:\/\/[a-zA-Z0-9_.-]+\.vercel\.app$/.test(origin)) return true;
+
+  return false;
+}
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl) or matched dev origins
-    if (!origin || allowedOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (isOriginAllowed(origin)) {
       return callback(null, true);
     }
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 };
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
 
 app.set('io', io);
 
