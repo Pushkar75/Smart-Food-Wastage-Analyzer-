@@ -8,8 +8,12 @@ export default defineConfig({
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5001',
+        target: process.env.VITE_API_URL || 'http://localhost:5002',
         changeOrigin: true,
+      },
+      '/socket.io': {
+        target: process.env.VITE_SOCKET_URL || 'http://localhost:5002',
+        ws: true,
       },
     },
   },

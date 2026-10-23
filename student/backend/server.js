@@ -6,6 +6,7 @@
  * fingerprint reader and the ML service — both are labelled as such in the UI.
  */
 
+require('dotenv').config();
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -15,7 +16,7 @@ const { db, dbPath } = require('./db');
 const store = require('./store');
 
 const app = express();
-const PORT = process.env.PORT || 5002;
+const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
   'http://localhost:3000',
@@ -37,9 +38,7 @@ const corsOptions = {
 };
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: corsOptions,
-});
+const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
 app.set('io', io);
 
@@ -152,9 +151,8 @@ app.post('/api/hardware/scan', (req, res) => {
   io.emit('attendance:update', scanResult);
   io.emit('dashboard:stats_changed', liveStats);
 
-  let statusCode = 201;
-  if (scanResult.status === 'already_marked') statusCode = 200;
-  else if (scanResult.status === 'unregistered') statusCode = 404;
+  let statusCode = 200;
+  if (scanResult.status === 'unregistered') statusCode = 404;
   else if (scanResult.status === 'error') statusCode = 400;
 
   return res.status(statusCode).json(scanResult);
@@ -177,6 +175,23 @@ app.post('/api/hardware/enroll', (req, res) => {
   const normalizedStudentId = String(studentId).trim().toUpperCase();
   const studentName = String(name).trim();
   const parsedFpId = parseInt(fingerprintId, 10);
+
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+
+  if (!nameRegex.test(studentName)) {
+    return res.status(400).json({
+      error: 'invalid_name',
+      message: 'Name must only contain letters and spaces.',
+    });
+  }
+
+  if (!studentIdRegex.test(normalizedStudentId)) {
+    return res.status(400).json({
+      error: 'invalid_student_id',
+      message: 'Student ID must be strictly alphanumeric and 9 characters long.',
+    });
+  }
 
   if (isNaN(parsedFpId)) {
     return res.status(400).json({

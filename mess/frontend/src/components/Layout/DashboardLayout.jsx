@@ -32,8 +32,10 @@ export default function DashboardLayout() {
                 {user?.name?.charAt(0) || 'U'}
               </div>
               <div style={{ marginRight: '1rem' }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{user?.name || 'User'}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user?.role || 'Admin'}</div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{user?.name || 'Admin'}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Admin - {user?.hostel || 'MH-1'}
+                </div>
               </div>
               <button onClick={logout} className="btn btn-outline" style={{ padding: '0.5rem', border: 'none' }} title="Logout">
                 <LogOut size={20} color="var(--text-muted)" />

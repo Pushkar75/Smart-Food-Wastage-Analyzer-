@@ -61,8 +61,8 @@ export default function AdminLayout() {
           <div className="sidebar-user">
             <span className="avatar" aria-hidden="true">{initials(user?.name)}</span>
             <span className="sidebar-user-text">
-              <span className="sidebar-user-name">{user?.name}</span>
-              <span className="sidebar-user-role">{user?.designation || 'Mess staff'}</span>
+              <span className="sidebar-user-name">{user?.name || 'Mess Admin'}</span>
+              <span className="sidebar-user-role">Admin - {user?.hostel || 'MH-1'}</span>
             </span>
           </div>
           <button type="button" className="logout-btn" onClick={handleLogout}>
@@ -73,10 +73,18 @@ export default function AdminLayout() {
       </nav>
 
       <div className="admin-main">
-        <header className="admin-header">
+        <header className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="header-titles">
             <h1 className="header-title">{current.title}</h1>
             <p className="header-sub">{current.subtitle}</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', padding: '0.4rem 0.85rem', borderRadius: '8px', border: '1px solid #334155' }}>
+            <span className="avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#3b82f6', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '0.75rem', fontWeight: 600 }} aria-hidden="true">
+              {initials(user?.name)}
+            </span>
+            <span style={{ fontSize: '0.85rem', color: '#f1f5f9', fontWeight: 500 }}>
+              {user?.name || 'Mess Admin'} <span style={{ color: '#94a3b8' }}>| Admin - {user?.hostel || 'MH-1'}</span>
+            </span>
           </div>
         </header>
 

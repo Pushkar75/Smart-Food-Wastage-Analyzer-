@@ -36,13 +36,6 @@ export default function Sidebar() {
           );
         })}
       </div>
-      
-      <div style={{ padding: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'rgba(255,255,255,0.1)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', color: 'white' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--warning-color)' }}></div>
-          Prototype &bull; Demo Data
-        </div>
-      </div>
     </div>
   );
 }

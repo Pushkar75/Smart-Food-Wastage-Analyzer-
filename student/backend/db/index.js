@@ -93,5 +93,22 @@ try {
   // Index already exists
 }
 
+// Migration: ensure email, role, hostel columns and unique email index
+try {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT;');
+} catch (err) {}
+
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email);');
+} catch (err) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN hostel TEXT;');
+} catch (err) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN role TEXT DEFAULT "student";');
+} catch (err) {}
+
 module.exports = { db, dbPath };
 

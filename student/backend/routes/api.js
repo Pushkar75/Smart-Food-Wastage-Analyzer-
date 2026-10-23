@@ -11,7 +11,19 @@
 
 const express = require('express');
 const data = require('../store');
+const { db } = require('../db');
 const { login, logout, requireAuth, requireRole } = require('../auth');
+const {
+  generateOtp,
+  sendOtpEmail,
+  storeOtp,
+  verifyOtp,
+  determineRole,
+  issueToken,
+  storePendingRegistration,
+  getPendingRegistration,
+  clearPendingRegistration,
+} = require('../otpService');
 
 const router = express.Router();
 
@@ -20,6 +32,230 @@ const VALID_INTENTS = ['attending', 'not_attending', 'none'];
 /* ------------------------------------------------------------------ *
  * Auth (shared by both portals)
  * ------------------------------------------------------------------ */
+
+/**
+ * POST /api/auth/register-request
+ * Body: { name, email, role, studentId/regNo, hostel }
+ * Validates VIT-AP domain, ensures account doesn't exist, stores pending reg, sends OTP.
+ */
+router.post('/auth/register-request', async (req, res) => {
+  const { name, email, role, studentId, regNo, hostel } = req.body || {};
+
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'Name is required.' });
+  }
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail.endsWith('@vitap.ac.in') && !normalizedEmail.endsWith('@vitapstudent.ac.in')) {
+    return res.status(403).json({ error: 'email doesnt belong to VIT-AP' });
+  }
+
+  // Check if account already exists
+  const existingUser = data.getUserByEmail ? data.getUserByEmail(normalizedEmail) : data.findUserForLogin(normalizedEmail);
+  if (existingUser && (existingUser.id || existingUser.user)) {
+    return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
+  }
+
+  const cleanRole = role === 'admin' ? 'admin' : (role === 'student' ? 'student' : (normalizedEmail.endsWith('@vitap.ac.in') ? 'admin' : 'student'));
+  const effectiveStudentId = studentId || regNo;
+
+  if (cleanRole === 'student' && !effectiveStudentId) {
+    return res.status(400).json({ error: 'Registration number is required for students.' });
+  }
+
+  const regData = {
+    name: String(name).trim(),
+    email: normalizedEmail,
+    role: cleanRole,
+    studentId: effectiveStudentId ? String(effectiveStudentId).trim().toUpperCase() : null,
+    hostel: hostel ? String(hostel).trim() : null,
+  };
+
+  storePendingRegistration(normalizedEmail, regData);
+
+  const otp = generateOtp();
+  storeOtp(normalizedEmail, otp);
+  await sendOtpEmail(normalizedEmail, otp);
+
+  return res.json({
+    success: true,
+    message: 'Verification OTP sent to your college email.',
+  });
+});
+
+/**
+ * POST /api/auth/register-verify
+ * Body: { email: string, otp: string }
+ * Verifies OTP, inserts new user into database, generates JWT token.
+ */
+router.post('/auth/register-verify', (req, res) => {
+  const { email, otp } = req.body || {};
+  if (!email || !otp) {
+    return res.status(400).json({ error: 'Email and OTP are required.' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const trimmedOtp = String(otp).trim();
+
+  const verification = verifyOtp(normalizedEmail, trimmedOtp);
+  if (!verification.valid) {
+    return res.status(400).json({ error: verification.error });
+  }
+
+  const pending = getPendingRegistration(normalizedEmail);
+  if (!pending) {
+    return res.status(400).json({ error: 'Registration session expired or not found. Please sign up again.' });
+  }
+
+  clearPendingRegistration(normalizedEmail);
+
+  // Save new user to users table
+  let newUser;
+  try {
+    newUser = data.registerUser({
+      role: pending.role,
+      name: pending.name,
+      email: pending.email,
+      studentId: pending.studentId,
+      hostel: pending.hostel,
+    });
+  } catch (err) {
+    console.error('[AUTH] Failed to save registered user:', err);
+    return res.status(500).json({ error: 'Failed to create user account. Please try again.' });
+  }
+
+  const payload = {
+    id: newUser.id,
+    name: newUser.name,
+    email: newUser.email,
+    role: newUser.role,
+    studentId: newUser.studentId || null,
+    regNo: newUser.studentId || null,
+    hostel: newUser.hostel || null,
+  };
+
+  const token = issueToken(payload);
+
+  try {
+    data.createSession(token, newUser.id);
+  } catch (err) {}
+
+  return res.json({
+    success: true,
+    token,
+    user: {
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      studentId: newUser.studentId || null,
+      regNo: newUser.studentId || null,
+      hostel: newUser.hostel || null,
+      messName: newUser.mess || (newUser.hostel ? `Mess - ${newUser.hostel}` : 'Central Mess — Block A'),
+    },
+  });
+});
+
+/**
+ * POST /api/auth/request-otp (Login Flow)
+ * Body: { email: string }
+ * Strictly checks that email ends with @vitap.ac.in or @vitapstudent.ac.in.
+ * Checks if account exists in database. If not, returns 404 {"error": "Account not found. Please sign up first."}.
+ * Generates OTP and sends strictly via nodemailer email (NEVER returned in JSON).
+ */
+router.post('/auth/request-otp', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail.endsWith('@vitap.ac.in') && !normalizedEmail.endsWith('@vitapstudent.ac.in')) {
+    return res.status(403).json({ error: 'email doesnt belong to VIT-AP' });
+  }
+
+  // Check if account exists in database
+  const user = data.getUserByEmail ? data.getUserByEmail(normalizedEmail) : null;
+  const legacyFound = !user && data.findUserForLogin ? data.findUserForLogin(normalizedEmail) : null;
+  const existingUser = user || legacyFound?.user;
+
+  if (!existingUser) {
+    return res.status(404).json({ error: 'Account not found. Please sign up first.' });
+  }
+
+  const otp = generateOtp();
+  storeOtp(normalizedEmail, otp);
+  await sendOtpEmail(normalizedEmail, otp);
+
+  return res.json({
+    success: true,
+    message: 'OTP sent successfully to your VIT-AP email address.',
+  });
+});
+
+/**
+ * POST /api/auth/verify-otp (Login Flow)
+ * Body: { email: string, otp: string }
+ * Verifies 6-digit OTP, loads user from database, issues JWT token.
+ */
+router.post('/auth/verify-otp', (req, res) => {
+  const { email, otp } = req.body || {};
+  if (!email || !otp) {
+    return res.status(400).json({ error: 'Email and OTP are required.' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const trimmedOtp = String(otp).trim();
+
+  const verification = verifyOtp(normalizedEmail, trimmedOtp);
+  if (!verification.valid) {
+    return res.status(400).json({ error: verification.error });
+  }
+
+  let user = data.getUserByEmail ? data.getUserByEmail(normalizedEmail) : null;
+  if (!user && data.findUserForLogin) {
+    const found = data.findUserForLogin(normalizedEmail);
+    user = found?.user;
+  }
+
+  if (!user) {
+    return res.status(404).json({ error: 'Account not found. Please sign up first.' });
+  }
+
+  const payload = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    studentId: user.studentId || user.regNo || null,
+    regNo: user.studentId || user.regNo || null,
+    hostel: user.hostel || null,
+  };
+
+  const token = issueToken(payload);
+
+  try {
+    data.createSession(token, user.id);
+  } catch (err) {}
+
+  return res.json({
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      studentId: user.studentId || user.regNo || null,
+      regNo: user.studentId || user.regNo || null,
+      hostel: user.hostel || null,
+      messName: user.mess || (user.hostel ? `Mess - ${user.hostel}` : 'Central Mess — Block A'),
+    },
+  });
+});
 
 router.post('/auth/login', (req, res) => {
   const { email, password } = req.body || {};
@@ -240,6 +476,96 @@ router.get('/attendance', ...adminOnly, (req, res) => {
 
 router.get('/analytics', ...adminOnly, (req, res) => {
   res.json({ wasteTrend: data.wasteTrend, meals: data.adminMealSnapshot() });
+});
+
+/**
+ * POST /api/hardware/enroll
+ * Body: { studentId, name, fingerprintId }
+ */
+router.post('/hardware/enroll', (req, res) => {
+  const { studentId, name, fingerprintId } = req.body || {};
+  if (!studentId || !name || fingerprintId === undefined || fingerprintId === null) {
+    return res.status(400).json({
+      error: 'missing_fields',
+      message: 'studentId, name, and fingerprintId are all required for enrollment.',
+    });
+  }
+
+  const normalizedStudentId = String(studentId).trim().toUpperCase();
+  const studentName = String(name).trim();
+  const parsedFpId = parseInt(fingerprintId, 10);
+
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+
+  if (!nameRegex.test(studentName)) {
+    return res.status(400).json({
+      error: 'invalid_name',
+      message: 'Name must only contain letters and spaces.',
+    });
+  }
+
+  if (!studentIdRegex.test(normalizedStudentId)) {
+    return res.status(400).json({
+      error: 'invalid_student_id',
+      message: 'Student ID must be strictly alphanumeric and 9 characters long.',
+    });
+  }
+
+  if (isNaN(parsedFpId)) {
+    return res.status(400).json({
+      error: 'invalid_fingerprint_id',
+      message: 'fingerprintId must be an integer.',
+    });
+  }
+
+  const checkUserStmt = db.prepare(`
+    SELECT id, name, student_id, fingerprint_id FROM users
+    WHERE upper(id) = ? OR upper(student_id) = ?
+  `);
+  const existingStudent = checkUserStmt.get(normalizedStudentId, normalizedStudentId);
+
+  if (existingStudent) {
+    return res.status(400).json({
+      error: 'Student is already enrolled.',
+    });
+  }
+
+  const checkFpStmt = db.prepare('SELECT id, name, student_id FROM users WHERE fingerprint_id = ?');
+  const existingFp = checkFpStmt.get(parsedFpId);
+  if (existingFp) {
+    return res.status(400).json({
+      error: `Fingerprint ID ${parsedFpId} is already assigned to ${existingFp.name || existingFp.student_id}.`,
+    });
+  }
+
+  const todayStr = data.toDateKey ? data.toDateKey(new Date()) : new Date().toISOString().slice(0, 10);
+  const email = `${normalizedStudentId.toLowerCase()}@smartmess.demo`;
+
+  const insertUserStmt = db.prepare(`
+    INSERT INTO users (id, role, name, email, password_hash, student_id, fingerprint_id, hostel, mess_plan, joined_on)
+    VALUES (?, 'student', ?, ?, '', ?, ?, 'General Hostel', 'Full Plan (3 meals)', ?)
+  `);
+
+  insertUserStmt.run(
+    normalizedStudentId,
+    studentName,
+    email,
+    normalizedStudentId,
+    parsedFpId,
+    todayStr
+  );
+
+  return res.status(201).json({
+    status: 'enrolled',
+    message: `Student ${studentName} (${normalizedStudentId}) mapped to fingerprint ID ${parsedFpId}.`,
+    student: {
+      id: normalizedStudentId,
+      name: studentName,
+      studentId: normalizedStudentId,
+      fingerprintId: parsedFpId,
+    },
+  });
 });
 
 module.exports = router;

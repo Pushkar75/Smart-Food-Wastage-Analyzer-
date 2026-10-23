@@ -9,8 +9,10 @@
  */
 
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const store = require('./store');
 const { verifyPassword } = require('./password');
+const { JWT_SECRET } = require('./otpService');
 
 /** Accepts an email address or a student ID. Returns null on any failure. */
 function login(identifier, password) {
@@ -27,6 +29,27 @@ function logout(token) {
 }
 
 function userForToken(token) {
+  if (!token) return null;
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload && payload.id) {
+      const user = store.getUserById(payload.id);
+      if (user) {
+        return { ...user, role: payload.role || user.role };
+      }
+      return {
+        id: payload.id,
+        email: payload.email,
+        role: payload.role,
+        name: payload.name,
+        studentId: payload.studentId || null,
+      };
+    }
+  } catch {
+    // Not a valid JWT or expired; fall back to session token
+  }
+
   return store.userForSession(token);
 }
 

@@ -39,8 +39,8 @@ export default function StudentSidebar({ user, unreadCount, onLogout }) {
         <div className="sidebar-user">
           <span className="avatar" aria-hidden="true">{initials(user?.name)}</span>
           <span className="sidebar-user-text">
-            <span className="sidebar-user-name">{user?.name}</span>
-            <span className="sidebar-user-role">Student</span>
+            <span className="sidebar-user-name">{user?.name || 'Student'}</span>
+            <span className="sidebar-user-role">{user?.studentId || user?.regNo || 'Student'}</span>
           </span>
         </div>
         <button type="button" className="logout-btn" onClick={onLogout}>

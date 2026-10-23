@@ -28,8 +28,10 @@ export default function StudentHeader({ title, subtitle, user, unreadCount }) {
         <div className="header-chip">
           <span className="avatar" aria-hidden="true">{initials(user?.name)}</span>
           <span>
-            <span className="header-chip-name" style={{ display: 'block' }}>{user?.name}</span>
-            <span className="header-chip-role">Student</span>
+            <span className="header-chip-name" style={{ display: 'block' }}>{user?.name || 'Student'}</span>
+            <span className="header-chip-role" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              {user?.studentId || user?.regNo || 'Student'}
+            </span>
           </span>
         </div>
       </div>

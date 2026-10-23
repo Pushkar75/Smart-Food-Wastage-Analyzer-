@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   role          TEXT NOT NULL CHECK (role IN ('student', 'admin')),
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
-  -- scrypt hash, never a plain-text password (see auth.js)
-  password_hash TEXT NOT NULL,
+  -- scrypt hash, optional for passwordless OTP accounts
+  password_hash TEXT DEFAULT '',
 
   -- mess staff columns
   designation   TEXT,

@@ -175,6 +175,28 @@ export default function Dashboard() {
     e.preventDefault();
     if (!enrollStudentId || !enrollName || !capturedFpId) return;
 
+    const trimmedName = enrollName.trim();
+    const trimmedStudentId = enrollStudentId.trim();
+
+    const nameRegex = /^[A-Za-z\s]+$/;
+    const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+
+    if (!nameRegex.test(trimmedName)) {
+      setEnrollMessage({
+        type: 'error',
+        text: 'Student name must only contain letters and spaces (no numbers or special characters).',
+      });
+      return;
+    }
+
+    if (!studentIdRegex.test(trimmedStudentId)) {
+      setEnrollMessage({
+        type: 'error',
+        text: 'Student ID must be strictly alphanumeric and 9 characters long (e.g. 24BCE7998).',
+      });
+      return;
+    }
+
     setEnrolling(true);
     setEnrollMessage(null);
 
@@ -182,8 +204,8 @@ export default function Dashboard() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        studentId: enrollStudentId,
-        name: enrollName,
+        studentId: trimmedStudentId,
+        name: trimmedName,
         fingerprintId: capturedFpId,
       }),
     })

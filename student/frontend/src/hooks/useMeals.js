@@ -13,7 +13,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useApi } from './useApi';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 export function useMeals() {
   const { data, loading, error, reload, setData } = useApi(() => studentApi.meals(), []);

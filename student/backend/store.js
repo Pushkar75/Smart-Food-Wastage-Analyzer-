@@ -75,7 +75,7 @@ try {
 // Selected explicitly so password_hash can never leave this module by accident.
 const USER_COLUMNS = `
   id, role, name, email, designation, mess,
-  student_id AS studentId, fingerprint_id AS fingerprintId, hostel, room, program, year,
+  student_id AS studentId, student_id AS regNo, fingerprint_id AS fingerprintId, hostel, room, program, year,
   mess_plan AS messPlan, joined_on AS joinedOn
 `;
 
@@ -110,6 +110,63 @@ const getUserByIdStmt = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id =
 
 function getUserById(id) {
   return shapeUser(getUserByIdStmt.get(id));
+}
+
+const getUserByEmailStmt = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = ?`);
+
+function getUserByEmail(email) {
+  const needle = String(email || '').trim().toLowerCase();
+  if (!needle) return null;
+  return shapeUser(getUserByEmailStmt.get(needle));
+}
+
+const insertRegisteredUserStmt = db.prepare(`
+  INSERT INTO users (id, role, name, email, password_hash, student_id, hostel, mess, designation, joined_on)
+  VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?)
+`);
+
+const updateExistingStudentOnRegisterStmt = db.prepare(`
+  UPDATE users
+  SET name = ?, email = ?, role = ?, hostel = COALESCE(?, hostel)
+  WHERE lower(student_id) = ? OR lower(id) = ?
+`);
+
+function registerUser({ id, role, name, email, studentId, hostel, mess, designation }) {
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const cleanRole = role === 'admin' ? 'admin' : 'student';
+  const cleanStudentId = studentId ? String(studentId).trim().toUpperCase() : null;
+  const userId = id || (cleanRole === 'admin' ? `admin-${Date.now().toString(36)}` : (cleanStudentId || `stu-${Date.now().toString(36)}`));
+  const todayStr = toDateKey(new Date());
+
+  // If a student record with this registration number already exists (e.g. from fingerprint enrollment)
+  if (cleanRole === 'student' && cleanStudentId) {
+    const existing = getUserById(cleanStudentId);
+    if (existing) {
+      updateExistingStudentOnRegisterStmt.run(
+        name.trim(),
+        normalizedEmail,
+        cleanRole,
+        hostel || null,
+        cleanStudentId.toLowerCase(),
+        cleanStudentId.toLowerCase()
+      );
+      return getUserById(existing.id);
+    }
+  }
+
+  insertRegisteredUserStmt.run(
+    userId,
+    cleanRole,
+    name.trim(),
+    normalizedEmail,
+    cleanStudentId,
+    hostel || null,
+    mess || (cleanRole === 'admin' ? (hostel ? `Mess - ${hostel}` : 'Central Mess — Block A') : null),
+    designation || (cleanRole === 'admin' ? 'Mess Administrator' : null),
+    todayStr
+  );
+
+  return getUserById(userId);
 }
 
 /* ------------------------------------------------------------------ *
@@ -572,6 +629,8 @@ module.exports = {
   // accounts + sessions (auth.js)
   findUserForLogin,
   getUserById,
+  getUserByEmail,
+  registerUser,
   createSession,
   deleteSession,
   userForSession,
@@ -692,6 +751,17 @@ function enrollStudent({ studentId, name, fingerprintId }) {
   const normalizedId = String(studentId).trim().toUpperCase();
   const trimmedName = String(name).trim();
   const parsedFpId = parseInt(fingerprintId, 10);
+
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+
+  if (!nameRegex.test(trimmedName)) {
+    return { error: 'invalid_name', message: 'Name must only contain letters and spaces.' };
+  }
+
+  if (!studentIdRegex.test(normalizedId)) {
+    return { error: 'invalid_student_id', message: 'Student ID must be strictly alphanumeric and 9 characters long.' };
+  }
 
   if (isNaN(parsedFpId)) {
     return { error: 'invalid_fingerprint_id', message: 'fingerprintId must be an integer.' };

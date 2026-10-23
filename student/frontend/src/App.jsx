@@ -15,8 +15,10 @@ import { AuthProvider, homePathForRole, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
+import Login from './pages/Login';
 import LoginStudent from './pages/LoginStudent';
 import LoginAdmin from './pages/LoginAdmin';
+import Signup from './pages/Signup';
 import NotFound from './pages/NotFound';
 
 import StudentLayout from './components/student/StudentLayout';
@@ -49,8 +51,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
 
-          <Route path="/login" element={<LoginStudent />} />
-          <Route path="/admin/login" element={<LoginAdmin />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/admin/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
           {/* ---------------- Student portal ---------------- */}
           <Route element={<ProtectedRoute role="student" loginPath="/login" />}>

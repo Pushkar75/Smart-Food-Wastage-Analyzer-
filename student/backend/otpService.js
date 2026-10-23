@@ -1,0 +1,155 @@
+require('dotenv').config();
+const nodemailer = require('nodemailer');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'vitap-smart-mess-jwt-secret-key-2026';
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+// In-memory store: Map<email, { otp, expiresAt }>
+const otpStore = new Map();
+
+function isVitapEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith('@vitap.ac.in') || normalized.endsWith('@vitapstudent.ac.in');
+}
+
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+async function sendOtpEmail(email, otp) {
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || `"VIT-AP Smart Mess" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: 'VIT-AP Smart Mess — Login Verification Code',
+    text: `Your login verification code for VIT-AP Smart Mess is: ${otp}\n\nThis code is valid for 5 minutes. Do not share it with anyone.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #1e293b; margin-top: 0;">Smart Mess Login Verification</h2>
+        <p style="color: #475569; font-size: 15px;">Your one-time login verification code for VIT-AP Smart Mess is:</p>
+        <div style="background-color: #f1f5f9; padding: 16px; border-radius: 6px; text-align: center; margin: 20px 0;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #4f46e5;">${otp}</span>
+        </div>
+        <p style="color: #64748b; font-size: 13px; margin-bottom: 0;">This OTP will expire in 5 minutes. If you did not request this OTP, you can safely ignore this email.</p>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[AUTH] OTP email sent to ${email} (messageId: ${info.messageId || 'mock'})`);
+  } catch (err) {
+    console.error(`[AUTH] Could not send email via transporter: ${err.message}`);
+  }
+  console.log(`[AUTH] >>> OTP for ${email}: ${otp} (valid for 5 mins) <<<`);
+}
+
+function storeOtp(email, otp) {
+  const normalized = email.trim().toLowerCase();
+  otpStore.set(normalized, {
+    otp: String(otp).trim(),
+    expiresAt: Date.now() + OTP_EXPIRY_MS,
+  });
+}
+
+function verifyOtp(email, otp) {
+  const normalized = String(email || '').trim().toLowerCase();
+  const candidate = String(otp || '').trim();
+
+  const record = otpStore.get(normalized);
+  if (!record) {
+    return { valid: false, error: 'No OTP requested for this email or OTP expired.' };
+  }
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(normalized);
+    return { valid: false, error: 'OTP has expired. Please request a new one.' };
+  }
+
+  if (record.otp !== candidate) {
+    return { valid: false, error: 'Invalid OTP. Please check and try again.' };
+  }
+
+  otpStore.delete(normalized);
+  return { valid: true };
+}
+
+function determineRole(email, requestedRole, defaultRole = 'student') {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (normalized.endsWith('@vitap.ac.in')) {
+    return 'admin';
+  }
+  if (normalized.endsWith('@vitapstudent.ac.in')) {
+    if (requestedRole === 'admin') return 'admin';
+    if (defaultRole === 'admin') return 'admin';
+    return 'student';
+  }
+  return defaultRole;
+}
+
+function issueToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+}
+
+function verifyToken(token) {
+  return jwt.verify(token, JWT_SECRET);
+}
+
+const pendingRegistrations = new Map();
+
+function storePendingRegistration(email, data) {
+  const normalized = email.trim().toLowerCase();
+  pendingRegistrations.set(normalized, {
+    ...data,
+    email: normalized,
+    expiresAt: Date.now() + OTP_EXPIRY_MS,
+  });
+}
+
+function getPendingRegistration(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  const record = pendingRegistrations.get(normalized);
+  if (!record) return null;
+  if (Date.now() > record.expiresAt) {
+    pendingRegistrations.delete(normalized);
+    return null;
+  }
+  return record;
+}
+
+function clearPendingRegistration(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  pendingRegistrations.delete(normalized);
+}
+
+function getStoredOtp(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  const record = otpStore.get(normalized);
+  if (!record || Date.now() > record.expiresAt) return null;
+  return record.otp;
+}
+
+module.exports = {
+  JWT_SECRET,
+  isVitapEmail,
+  generateOtp,
+  sendOtpEmail,
+  storeOtp,
+  verifyOtp,
+  getStoredOtp,
+  determineRole,
+  issueToken,
+  verifyToken,
+  storePendingRegistration,
+  getPendingRegistration,
+  clearPendingRegistration,
+};

@@ -109,6 +109,22 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
 export const authApi = {
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
+  requestOtp: (email) =>
+    request('/auth/request-otp', { method: 'POST', body: { email }, auth: false }),
+  verifyOtp: (email, otp, role) =>
+    request('/auth/verify-otp', { method: 'POST', body: { email, otp, role }, auth: false }),
+  registerRequest: ({ name, email, role, studentId, regNo, hostel }) =>
+    request('/auth/register-request', {
+      method: 'POST',
+      body: { name, email, role, studentId, regNo, hostel },
+      auth: false,
+    }),
+  registerVerify: (email, otp) =>
+    request('/auth/register-verify', {
+      method: 'POST',
+      body: { email, otp },
+      auth: false,
+    }),
   me: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
 };

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import DashboardLayout from './components/Layout/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import TodaysMeals from './pages/TodaysMeals';
@@ -11,8 +12,12 @@ import Profile from './pages/Profile';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+  const { user, token, loading } = useAuth();
+  if (loading) {
+    return <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>Checking session...</div>;
+  }
+  const storedToken = token || localStorage.getItem('token');
+  if (!storedToken || !user) return <Navigate to="/login" replace />;
   return children;
 };
 
@@ -21,6 +26,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         
         {/* Protected Dashboard Routes */}
         <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
