@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 const AuthContext = createContext();
 
@@ -57,7 +58,7 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -80,7 +81,7 @@ export function AuthProvider({ children }) {
 
   const requestOtp = async (email) => {
     try {
-      const response = await fetch('/api/auth/request-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -97,7 +98,7 @@ export function AuthProvider({ children }) {
 
   const verifyOtp = async (email, otp) => {
     try {
-      const response = await fetch('/api/auth/verify-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp })
@@ -127,7 +128,7 @@ export function AuthProvider({ children }) {
 
   const registerRequest = async ({ name, email, role, hostel, studentId }) => {
     try {
-      const response = await fetch('/api/auth/register-request', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, role, hostel, studentId })
@@ -144,7 +145,7 @@ export function AuthProvider({ children }) {
 
   const registerVerify = async (email, otp) => {
     try {
-      const response = await fetch('/api/auth/register-verify', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register-verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp })

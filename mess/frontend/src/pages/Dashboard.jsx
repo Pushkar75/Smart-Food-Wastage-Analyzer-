@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users, CheckCircle, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002';
-const HARDWARE_API_URL = import.meta.env.VITE_HARDWARE_API_URL || 'http://localhost:5002';
+import { API_BASE_URL, SOCKET_URL, HARDWARE_API_URL } from '../config/api';
 
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -20,7 +18,7 @@ export default function Dashboard() {
   const [enrolling, setEnrolling] = useState(false);
 
   const fetchSummary = useCallback(() => {
-    fetch('/api/dashboard/summary')
+    fetch(`${API_BASE_URL}/api/dashboard/summary`)
       .then(res => res.json())
       .then(json => {
         setDashboardData(json);

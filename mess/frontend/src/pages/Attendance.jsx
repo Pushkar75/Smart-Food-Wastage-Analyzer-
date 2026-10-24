@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export default function Attendance() {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/attendance')
+    fetch(`${API_BASE_URL}/api/attendance`)
       .then(res => res.json())
       .then(data => {
         setAttendance(data);

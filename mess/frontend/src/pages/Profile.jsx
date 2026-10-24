@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Mail, MapPin, Building, Shield } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 export default function Profile() {
   const { user, loading: authLoading } = useAuth();
@@ -8,7 +9,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/profile')
+    fetch(`${API_BASE_URL}/api/profile`)
       .then(res => res.json())
       .then(data => {
         setProfile(data);

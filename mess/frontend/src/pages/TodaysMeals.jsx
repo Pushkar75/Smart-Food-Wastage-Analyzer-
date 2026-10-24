@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002';
+import { API_BASE_URL, SOCKET_URL } from '../config/api';
 
 export default function TodaysMeals() {
   const [meals, setMeals] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMeals = useCallback(() => {
-    fetch('/api/meals/today')
+    fetch(`${API_BASE_URL}/api/meals/today`)
       .then(res => res.json())
       .then(data => {
         setMeals(data);

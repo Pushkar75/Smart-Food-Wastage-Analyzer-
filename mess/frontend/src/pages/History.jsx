@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export default function History() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/predictions')
+    fetch(`${API_BASE_URL}/api/predictions`)
       .then(res => res.json())
       .then(data => {
         setHistory(data);

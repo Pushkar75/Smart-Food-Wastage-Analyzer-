@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { API_BASE_URL } from '../config/api';
 
 export default function Predictions() {
   const [history, setHistory] = useState([]);
@@ -9,8 +10,8 @@ export default function Predictions() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/predictions').then(res => res.json()),
-      fetch('/api/analytics').then(res => res.json())
+      fetch(`${API_BASE_URL}/api/predictions`).then(res => res.json()),
+      fetch(`${API_BASE_URL}/api/analytics`).then(res => res.json())
     ]).then(([historyData, analyticsData]) => {
       setHistory(historyData);
       setAnalytics(analyticsData);
