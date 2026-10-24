@@ -11,7 +11,7 @@ const otpStore = new Map();
 function isVitapEmail(email) {
   if (!email || typeof email !== 'string') return false;
   const normalized = email.trim().toLowerCase();
-  return normalized.endsWith('@vitap.ac.in') || normalized.endsWith('@vitapstudent.ac.in');
+  return normalized.endsWith('@vitapstudent.ac.in');
 }
 
 function generateOtp() {

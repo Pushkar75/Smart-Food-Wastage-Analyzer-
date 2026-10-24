@@ -49,8 +49,11 @@ router.post('/auth/register-request', async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail.endsWith('@vitap.ac.in') && !normalizedEmail.endsWith('@vitapstudent.ac.in')) {
-    return res.status(403).json({ error: 'email doesnt belong to VIT-AP' });
+  if (!normalizedEmail.endsWith('@vitapstudent.ac.in')) {
+    return res.status(400).json({
+      error: 'Invalid domain. Students must use a @vitapstudent.ac.in email address.',
+      message: 'Invalid domain. Students must use a @vitapstudent.ac.in email address.',
+    });
   }
 
   // Check if account already exists
@@ -62,8 +65,20 @@ router.post('/auth/register-request', async (req, res) => {
   const cleanRole = role === 'admin' ? 'admin' : (role === 'student' ? 'student' : (normalizedEmail.endsWith('@vitap.ac.in') ? 'admin' : 'student'));
   const effectiveStudentId = studentId || regNo;
 
-  if (cleanRole === 'student' && !effectiveStudentId) {
-    return res.status(400).json({ error: 'Registration number is required for students.' });
+  const studentIdRegex = /^\d{2}[A-Za-z]{3}\d{4,5}$/;
+
+  if (cleanRole === 'student') {
+    if (!effectiveStudentId || !studentIdRegex.test(String(effectiveStudentId).trim())) {
+      return res.status(400).json({
+        error: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+        message: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+      });
+    }
+  } else if (effectiveStudentId && !studentIdRegex.test(String(effectiveStudentId).trim())) {
+    return res.status(400).json({
+      error: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+      message: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+    });
   }
 
   const regData = {
@@ -173,8 +188,11 @@ router.post('/auth/request-otp', async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail.endsWith('@vitap.ac.in') && !normalizedEmail.endsWith('@vitapstudent.ac.in')) {
-    return res.status(403).json({ error: 'email doesnt belong to VIT-AP' });
+  if (!normalizedEmail.endsWith('@vitapstudent.ac.in')) {
+    return res.status(400).json({
+      error: 'Invalid domain. Students must use a @vitapstudent.ac.in email address.',
+      message: 'Invalid domain. Students must use a @vitapstudent.ac.in email address.',
+    });
   }
 
   // Check if account exists in database
@@ -520,7 +538,7 @@ router.post('/hardware/enroll', (req, res) => {
   const parsedFpId = parseInt(fingerprintId, 10);
 
   const nameRegex = /^[A-Za-z\s]+$/;
-  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+  const studentIdRegex = /^\d{2}[A-Za-z]{3}\d{4,5}$/;
 
   if (!nameRegex.test(studentName)) {
     return res.status(400).json({
@@ -531,8 +549,8 @@ router.post('/hardware/enroll', (req, res) => {
 
   if (!studentIdRegex.test(normalizedStudentId)) {
     return res.status(400).json({
-      error: 'invalid_student_id',
-      message: 'Student ID must be strictly alphanumeric and 9 characters long.',
+      error: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+      message: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
     });
   }
 

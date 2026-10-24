@@ -180,7 +180,7 @@ export default function Dashboard() {
     const trimmedStudentId = enrollStudentId.trim();
 
     const nameRegex = /^[A-Za-z\s]+$/;
-    const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+    const studentIdRegex = /^\d{2}[A-Za-z]{3}\d{4,5}$/;
 
     if (!nameRegex.test(trimmedName)) {
       setEnrollMessage({
@@ -193,7 +193,7 @@ export default function Dashboard() {
     if (!studentIdRegex.test(trimmedStudentId)) {
       setEnrollMessage({
         type: 'error',
-        text: 'Student ID must be strictly alphanumeric and 9 characters long (e.g. 24BCE7998).',
+        text: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
       });
       return;
     }
@@ -268,6 +268,14 @@ export default function Dashboard() {
     actual: dashboardData.summary?.actualSoFar || 254,
     accuracy: dashboardData.summary?.accuracy || 94.8,
   };
+
+  const currentAccuracy = (currentMeal.confirmed > 0 && currentMeal.actual > 0)
+    ? Math.min(100, (currentMeal.actual / currentMeal.confirmed) * 100)
+    : (Number(currentMeal.accuracy) || 95.0);
+
+  const overallAccuracy = (fullDay.confirmed > 0 && fullDay.actual > 0)
+    ? Math.min(100, (fullDay.actual / fullDay.confirmed) * 100)
+    : (Number(fullDay.accuracy) || 94.8);
 
   return (
     <div>
@@ -353,7 +361,7 @@ export default function Dashboard() {
                   />
                   <input
                     type="text"
-                    placeholder="Enter Student Reg No (e.g. 24BCE7998)"
+                    placeholder="Enter Student Reg No (e.g. 24BCA7612)"
                     value={enrollStudentId}
                     onChange={(e) => setEnrollStudentId(e.target.value)}
                     style={{ flex: 1, minWidth: '180px', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md, 6px)', border: '1px solid #ccc', fontSize: '0.875rem' }}
@@ -440,7 +448,7 @@ export default function Dashboard() {
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500 }}>Current Accuracy</h3>
               <Clock size={18} color="var(--primary-color)" />
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 700 }}>{currentMeal.accuracy}%</div>
+            <div style={{ fontSize: '2rem', fontWeight: 700 }}>{currentAccuracy.toFixed(4)}%</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.5rem' }}>Active meal ratio</div>
           </div>
         </div>
@@ -541,7 +549,7 @@ export default function Dashboard() {
 
           <div className="card">
             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '0.5rem' }}>Overall Daily Accuracy</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{fullDay.accuracy}%</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{overallAccuracy.toFixed(4)}%</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.25rem' }}>Attendance vs Opt-ins</div>
           </div>
         </div>

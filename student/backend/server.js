@@ -211,7 +211,7 @@ app.post('/api/hardware/enroll', (req, res) => {
   const parsedFpId = parseInt(fingerprintId, 10);
 
   const nameRegex = /^[A-Za-z\s]+$/;
-  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+  const studentIdRegex = /^\d{2}[A-Za-z]{3}\d{4,5}$/;
 
   if (!nameRegex.test(studentName)) {
     return res.status(400).json({
@@ -222,8 +222,8 @@ app.post('/api/hardware/enroll', (req, res) => {
 
   if (!studentIdRegex.test(normalizedStudentId)) {
     return res.status(400).json({
-      error: 'invalid_student_id',
-      message: 'Student ID must be strictly alphanumeric and 9 characters long.',
+      error: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+      message: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
     });
   }
 

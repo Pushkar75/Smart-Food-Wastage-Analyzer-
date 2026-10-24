@@ -756,14 +756,17 @@ function enrollStudent({ studentId, name, fingerprintId }) {
   const parsedFpId = parseInt(fingerprintId, 10);
 
   const nameRegex = /^[A-Za-z\s]+$/;
-  const studentIdRegex = /^[A-Za-z0-9]{9}$/;
+  const studentIdRegex = /^\d{2}[A-Za-z]{3}\d{4,5}$/;
 
   if (!nameRegex.test(trimmedName)) {
     return { error: 'invalid_name', message: 'Name must only contain letters and spaces.' };
   }
 
   if (!studentIdRegex.test(normalizedId)) {
-    return { error: 'invalid_student_id', message: 'Student ID must be strictly alphanumeric and 9 characters long.' };
+    return {
+      error: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+      message: 'Registration number must be 2 numbers, 3 alphabets, followed by 4-5 numbers (e.g., 24BCA7612).',
+    };
   }
 
   if (isNaN(parsedFpId)) {
@@ -1017,12 +1020,12 @@ function getLiveStats() {
   const fullDayConfirmed = meals.reduce((sum, m) => sum + m.confirmed, 0);
   const fullDayActual = meals.reduce((sum, m) => sum + m.actual, 0);
   const fullDayAccuracy = (fullDayConfirmed > 0 && fullDayActual > 0)
-    ? Math.min(100, Math.round((fullDayActual / fullDayConfirmed) * 100))
+    ? Math.min(100, (fullDayActual / fullDayConfirmed) * 100)
     : 94.8;
 
   const currentMealPredicted = currentMeal.predicted || MEAL_BASELINES[currentMeal.id] || 0;
   const currentMealAccuracy = (currentMeal.confirmed > 0 && currentMeal.actual > 0)
-    ? Math.min(100, Math.round((currentMeal.actual / currentMeal.confirmed) * 100))
+    ? Math.min(100, (currentMeal.actual / currentMeal.confirmed) * 100)
     : 95.0;
 
   const nextMealPredicted = nextMeal.predicted || MEAL_BASELINES[nextMeal.id] || 0;

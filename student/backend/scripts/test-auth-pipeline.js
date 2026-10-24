@@ -41,8 +41,18 @@ async function runTests() {
       body: JSON.stringify({ email: 'intruder@gmail.com' })
     });
     const data1 = await res1.json();
-    assert(res1.status === 403, 'Rejects non-VIT-AP domain with 403');
-    assert(data1.error === 'email doesnt belong to VIT-AP', 'Returns exact error message: email doesnt belong to VIT-AP');
+    assert(res1.status === 400, 'Rejects non-student domain with 400');
+    assert(data1.error === 'Invalid domain. Students must use a @vitapstudent.ac.in email address.', 'Returns exact error message: Invalid domain. Students must use a @vitapstudent.ac.in email address.');
+
+    // 1b. Reject admin @vitap.ac.in domain on student login
+    const res1b = await fetch(`${BASE}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@vitap.ac.in' })
+    });
+    const data1b = await res1b.json();
+    assert(res1b.status === 400, 'Rejects @vitap.ac.in domain with 400 on student login');
+    assert(data1b.error === 'Invalid domain. Students must use a @vitapstudent.ac.in email address.', 'Returns exact error message on @vitap.ac.in');
 
     // 2. Domain restriction on /api/auth/register-request
     console.log('\n2. Testing Domain Restriction on Registration...');
@@ -52,8 +62,18 @@ async function runTests() {
       body: JSON.stringify({ name: 'Hacker', email: 'intruder@yahoo.com', role: 'student' })
     });
     const data2 = await res2.json();
-    assert(res2.status === 403, 'Rejects non-VIT-AP domain with 403 on register');
-    assert(data2.error === 'email doesnt belong to VIT-AP', 'Returns exact error message: email doesnt belong to VIT-AP');
+    assert(res2.status === 400, 'Rejects non-student domain with 400 on register');
+    assert(data2.error === 'Invalid domain. Students must use a @vitapstudent.ac.in email address.', 'Returns exact error message on register');
+
+    // 2b. Reject admin @vitap.ac.in domain on student register
+    const res2b = await fetch(`${BASE}/api/auth/register-request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Admin Intruder', email: 'admin@vitap.ac.in', role: 'student' })
+    });
+    const data2b = await res2b.json();
+    assert(res2b.status === 400, 'Rejects @vitap.ac.in on student register with 400');
+    assert(data2b.error === 'Invalid domain. Students must use a @vitapstudent.ac.in email address.', 'Returns exact error message for @vitap.ac.in on register');
 
     // 3. Login attempt with unregistered VIT-AP email
     console.log('\n3. Testing Login for Unregistered Account...');
@@ -118,8 +138,8 @@ async function runTests() {
     const dbStudent = store.getUserByEmail(studentEmail);
     assert(dbStudent !== null, 'User persisted in SQLite database');
 
-    // 6. Mess Admin Registration Request & Verification
-    console.log('\n6. Testing Mess Admin Registration Request & Verification...');
+    // 6. Mess Admin Registration Blocked on Student Portal
+    console.log('\n6. Testing Mess Admin Registration Blocked on Student Portal...');
     const adminEmail = `admin.${timestamp}@vitap.ac.in`;
     const res6 = await fetch(`${BASE}/api/auth/register-request`, {
       method: 'POST',
@@ -132,22 +152,8 @@ async function runTests() {
       })
     });
     const data6 = await res6.json();
-    assert(res6.status === 200, 'Admin registration request succeeds with 200');
-    assert(data6.demoOtp === undefined && data6.otp === undefined, 'STRICT OTP CONCEALMENT: no OTP in admin register response');
-
-    const pendingAdmin = otpService.getPendingRegistration(adminEmail);
-    assert(pendingAdmin !== null, 'Pending admin registration stored in memory');
-    const adminOtp = otpService.getStoredOtp(adminEmail);
-    const res6Verify = await fetch(`${BASE}/api/auth/register-verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: adminEmail, otp: adminOtp })
-    });
-    const data6Verify = await res6Verify.json();
-    assert(res6Verify.status === 200, 'Admin registration verification succeeds with 200');
-    assert(data6Verify.user.name === 'Rajesh Kumar', 'Admin name matches');
-    assert(data6Verify.user.role === 'admin', 'Admin role is admin');
-    assert(data6Verify.user.hostel === 'MH-3', 'Admin hostel is MH-3');
+    assert(res6.status === 400, 'Admin registration rejected on student backend with 400');
+    assert(data6.error === 'Invalid domain. Students must use a @vitapstudent.ac.in email address.', 'Returns exact error message');
 
     // 7. Login Flow for Registered Student
     console.log('\n7. Testing Login Flow for Registered Student...');
