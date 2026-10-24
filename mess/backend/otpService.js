@@ -1,5 +1,5 @@
 require('dotenv').config();
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vitap-smart-mess-jwt-secret-key-2026';
@@ -18,44 +18,42 @@ function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
-
 async function sendOtpEmail(email, otp) {
-  const mailOptions = {
-    from: process.env.EMAIL_FROM || `"VIT-AP Smart Mess" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: 'VIT-AP Smart Mess — Login Verification Code',
-    text: `Your login verification code for VIT-AP Smart Mess is: ${otp}\n\nThis code is valid for 5 minutes. Do not share it with anyone.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <h2 style="color: #1e293b; margin-top: 0;">Smart Mess Login Verification</h2>
-        <p style="color: #475569; font-size: 15px;">Your one-time login verification code for VIT-AP Smart Mess is:</p>
-        <div style="background-color: #f1f5f9; padding: 16px; border-radius: 6px; text-align: center; margin: 20px 0;">
-          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #4f46e5;">${otp}</span>
-        </div>
-        <p style="color: #64748b; font-size: 13px; margin-bottom: 0;">This OTP will expire in 5 minutes. If you did not request this OTP, you can safely ignore this email.</p>
-      </div>
-    `,
-  };
-
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`[AUTH] OTP email sent to ${email} (messageId: ${info.messageId || 'mock'})`);
-  } catch (err) {
-    console.error(`[AUTH] Could not send email via transporter: ${err.message}`);
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('[AUTH] Missing RESEND_API_KEY environment variable.');
+    throw new Error('Email service is not configured. Missing RESEND_API_KEY.');
   }
-  console.log(`[AUTH] >>> OTP for ${email}: ${otp} (valid for 5 mins) <<<`);
+
+  const resend = new Resend(apiKey);
+  const fromAddress = process.env.EMAIL_FROM || 'Smart Mess <onboarding@resend.dev>';
+  const subject = 'VIT-AP Smart Mess — Login Verification Code';
+  const text = `Your login verification code for VIT-AP Smart Mess is: ${otp}\n\nThis code is valid for 5 minutes. Do not share it with anyone.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <h2 style="color: #1e293b; margin-top: 0;">Smart Mess Login Verification</h2>
+      <p style="color: #475569; font-size: 15px;">Your one-time login verification code for VIT-AP Smart Mess is:</p>
+      <div style="background-color: #f1f5f9; padding: 16px; border-radius: 6px; text-align: center; margin: 20px 0;">
+        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #4f46e5;">${otp}</span>
+      </div>
+      <p style="color: #64748b; font-size: 13px; margin-bottom: 0;">This OTP will expire in 5 minutes. If you did not request this OTP, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  const { data, error } = await resend.emails.send({
+    from: fromAddress,
+    to: [email],
+    subject,
+    text,
+    html,
+  });
+
+  if (error) {
+    console.error(`[AUTH] Resend failed to send OTP to ${email}:`, error.message || error);
+    throw new Error(`Failed to send verification email: ${error.message || 'Resend API error'}`);
+  }
+
+  console.log(`[AUTH] OTP email successfully sent to ${email} (messageId: ${data?.id})`);
 }
 
 function storeOtp(email, otp) {

@@ -83,7 +83,16 @@ router.post('/auth/register-request', async (req, res) => {
 
   const otp = generateOtp();
   storeOtp(normalizedEmail, otp);
-  await sendOtpEmail(normalizedEmail, otp);
+
+  try {
+    await sendOtpEmail(normalizedEmail, otp);
+  } catch (err) {
+    console.error('[AUTH] Failed to send registration OTP email:', err.message || err);
+    return res.status(500).json({
+      error: 'Failed to send verification code. Please try again later.',
+      message: err.message || 'Failed to send verification code.',
+    });
+  }
 
   return res.json({
     success: true,
@@ -193,7 +202,16 @@ router.post('/auth/request-otp', async (req, res) => {
 
   const otp = generateOtp();
   storeOtp(normalizedEmail, otp);
-  await sendOtpEmail(normalizedEmail, otp);
+
+  try {
+    await sendOtpEmail(normalizedEmail, otp);
+  } catch (err) {
+    console.error('[AUTH] Failed to send login OTP email:', err.message || err);
+    return res.status(500).json({
+      error: 'Failed to send verification code. Please try again later.',
+      message: err.message || 'Failed to send verification code.',
+    });
+  }
 
   return res.json({
     success: true,
